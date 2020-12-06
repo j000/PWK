@@ -7,12 +7,12 @@ import { BufferGeometryUtils } from './BufferGeometryUtils.js';
 
 'use strict';
 
-const METER = 0.1;
+const METER = 0.1; // skalowanie, bo inaczej mgła dziwnie wygląda
 const MAX_STEPS = 5;
 const MAX_FLOORS = 70;
 
 const FLOOR = 3.5 * METER;
-const GRID = 60 * METER;
+const GRID = 40 * METER;
 const STREET = (3.5 * 4 + 1.75 * 2) * METER;
 
 const COLOR_BACKGROUND = 0x03004b;
@@ -23,12 +23,13 @@ const COLOR_LIGHT_AMBIENT = new THREE.Color("hsl(294, 40%, 40%)").getHex();
 const COLOR_LIGHT_SECONDARY = 0xde4ae0;
 const COLOR_EMISSIVE = 0x167f7d; // 0x2aefee;
 
-const N = 2;
+const N = 30;
 
 ////////////////////////////////////////
 var camera, controls, scene, renderer, global_material;
 
 ////////////////////////////////////////
+// random int between min and max, inclusive
 function getRandomInt(min, max) {
 	min = Math.ceil(min);
 	max = Math.floor(max);
@@ -39,62 +40,81 @@ function getRandom(min, max) {
 	return Math.random() * (max - min) + min;
 }
 
-class Genotyp {
-	constructor() {
-		this.x = 0;
+function polygon(x) {
+	const out = new THREE.Shape();
+	const angle = Math.PI * 2 / x;
+	out.moveTo(
+		Math.sin(0),
+		Math.cos(0)
+	);
+	for (var i = 1; i <= x; ++i) {
+		out.lineTo(
+			Math.sin(i * angle),
+			Math.cos(i * angle)
+		);
 	}
-}
-
-function square() {
-	var out = new THREE.Shape();
-	out.moveTo(-1, -1);
-	out.lineTo( 1, -1);
-	// out.lineTo( 1,  1);
-	out.lineTo(1, 0.5);
-	out.lineTo(0.5, 0.5);
-	out.lineTo(0.5, 1);
-	out.lineTo(-1,  1);
-	out.lineTo(-1, -1);
 	return out;
 }
 
-function building() {
-	// if (Math.random() > 1./8) {
-	// 	var geometry = new THREE.BoxBufferGeometry(1, 1, 1);
-	// } else {
-	// 	var geometry = new THREE.CylinderBufferGeometry(0.5, 0.5, 1, 24);
-	// }
-	const extrudeSettings = {depth: 2, bevelEnabled: false};
-	const floors = getRandomInt(10, MAX_FLOORS);
-	var height = getRandomInt(5, floors);
-	var width1 = getRandom(0.5, 1) * GRID;
-	var width2 = getRandom(0.5, 1) * GRID;
-	var step = 1;
-	const geometries = [];
-	do {
-		// var geometry = new THREE.BoxBufferGeometry(1, 1, 1);
-		// geometry.translate(0, 0.5, 0);
+class Segment {
+	constructor() {
+		// TODO: zmien nazwe
+		this.N = getRandomInt(3, 8);
+		this.height = getRandomInt(5, MAX_FLOORS);
+		this.angle = getRandom(0, Math.PI * 2);
+		this.scale_x = getRandom(0.1, 1.0);
+		this.scale_y = getRandom(0.1, 1.0);
+		this.offset_x = getRandom(0.0, 1.0 - this.scale_x);
+		this.offset_y = getRandom(0.0, 1.0 - this.scale_y);
+	}
+}
 
-		var shape = square();
-		var geometry = new THREE.ExtrudeBufferGeometry(shape, extrudeSettings);
+class Genotyp {
+	constructor() {
+		this.levels = [];
+		const limit = getRandomInt(1, MAX_STEPS);
+		for (var i = 0; i < limit; ++i) {
+			// TODO center
+			var segment = new Segment();
+			this.levels.push(segment);
+		}
+	}
+}
+
+function building(genotyp) {
+	const extrudeSettings = {depth: 2, bevelEnabled: false};
+	const geometries = [];
+	for (var i = 0; i < genotyp.levels.length; ++i) {
+		const segment = genotyp.levels[i];
+		const shape = polygon(segment.N);
+		const geometry = new THREE.ExtrudeBufferGeometry(
+			shape,
+			extrudeSettings
+		);
 		geometry.rotateX(Math.PI / 2);
 		geometry.translate(0, 2, 0);
 		geometry.scale(0.5, 0.5, 0.5);
 
-		geometry.scale(width1, FLOOR * height, width2);
-		// geometry.translate(Math.random() * GRID, 0, Math.random() * GRID);
+		// const geometry = new THREE.BoxBufferGeometry(1, 1, 1);
+		// geometry.translate(0, 0.5, 0);
+		// geometry.scale(1./Math.SQRT2, 1., 1./Math.SQRT2);
 
+		geometry.scale(
+			segment.scale_x * GRID,
+			FLOOR * segment.height,
+			segment.scale_y * GRID
+		);
+		// geometry.translate(
+		// 	GRID / 2, //(0.5 + segment.offset_x) * GRID,
+		// 	0,
+		// 	GRID / 2 //(0.5 + segment.offset_y) * GRID
+		// );
+		geometry.rotateY(segment.angle);
 		geometries.push(geometry);
-
-		width1 = getRandom(0.25, 1.0) * width1;
-		width2 = getRandom(0.25, 1.0) * width2;
-		height = getRandomInt(height + 5, floors);
-
-		++step;
-	} while (height < floors);// && step < MAX_STEPS && Math.random() < 0.5);
+	}
 
 	const mergedGeometry = BufferGeometryUtils.mergeBufferGeometries(geometries, false);
-	mergedGeometry.translate(GRID / 2, 0, GRID / 2);
+	// mergedGeometry.translate(GRID / 2, 0, GRID / 2);
 	var mesh = new THREE.Mesh(mergedGeometry, global_material);
 	mesh.castShadow = true;
 	mesh.receiveShadow = true;
@@ -105,7 +125,6 @@ function building() {
 }
 
 function init() {
-
 	// global_material = new THREE.MeshPhongMaterial({ color: COLOR_MATERIAL });
 	// global_material = new THREE.MeshToonMaterial({ color: COLOR_MATERIAL });
 	global_material = new THREE.MeshLambertMaterial({
@@ -141,11 +160,6 @@ function init() {
 	controls.maxDistance = 3000 * METER;
 
 	controls.maxPolarAngle = Math.PI / 2 * 0.99;
-
-	//
-
-	// const axesHelper = new THREE.AxesHelper(20 * METER);
-	// scene.add(axesHelper);
 
 	// lights
 
@@ -197,19 +211,17 @@ function init() {
 
 	for (var i = -N; i <= N; ++i)
 		for (var j = -N; j <= N; ++j) {
-			var mesh = building();
+			var mesh = building(new Genotyp());
 			mesh.position.x = Math.floor(i / 2) * STREET + i * GRID;
 			mesh.position.z = Math.floor(j / 2) * STREET + j * GRID;
 			mesh.updateMatrix();
-			const axesHelper = new THREE.AxesHelper(1);
-			axesHelper.position.x = mesh.position.x + GRID / 2;
-			axesHelper.position.z = mesh.position.z + GRID / 2;
-			scene.add(axesHelper);
-
 			scene.add(mesh);
-		}
 
-	//
+			// const axesHelper = new THREE.AxesHelper(GRID);
+			// axesHelper.position.x = mesh.position.x + GRID / 2;
+			// axesHelper.position.z = mesh.position.z + GRID / 2;
+			// scene.add(axesHelper);
+		}
 
 	window.addEventListener('resize', onWindowResize, false);
 }
