@@ -15,7 +15,7 @@ const STREET = (3.5 * 4 + 1.75 * 2) * METER;
 
 const COLOR_BACKGROUND = new THREE.Color("hsl(242, 40%, 20%)");
 const COLOR_MATERIAL = new THREE.Color("hsl(0, 0%, 75%)");
-const COLOR_WIREFRAME = COLOR_BACKGROUND;
+const COLOR_EDGES = COLOR_BACKGROUND;
 const COLOR_EMISSIVE = new THREE.Color("hsl(180, 70%, 15%)");
 const COLOR_LIGHT_MAIN =  new THREE.Color("hsl(48, 85%, 84%)");
 const COLOR_LIGHT_AMBIENT = new THREE.Color("hsl(242, 00%, 40%)");
@@ -23,7 +23,7 @@ const COLOR_LIGHT_AMBIENT = new THREE.Color("hsl(242, 00%, 40%)");
 const N = 30;
 
 ////////////////////////////////////////
-var camera, controls, scene, renderer, global_material, wireframe_material;
+var camera, controls, scene, renderer, global_material, edges_material;
 var mainlight;
 var genotypy = [];
 
@@ -94,8 +94,8 @@ function init() {
 		emissive: COLOR_EMISSIVE,
 		emissiveIntensity: 1.0,
 	});
-	wireframe_material = new THREE.LineBasicMaterial({
-		color: COLOR_WIREFRAME,
+	edges_material = new THREE.LineBasicMaterial({
+		color: COLOR_EDGES,
 		opacity: 0.25,
 		transparent: true,
 	});
@@ -141,8 +141,8 @@ function init() {
 		mainlight.shadow.camera.bottom = -2 * GRID * N;
 		mainlight.shadow.camera.top = 2 * GRID * N;
 
-		mainlight.shadow.mapSize.width = 4096;
-		mainlight.shadow.mapSize.height = 4096;
+		mainlight.shadow.mapSize.width = 2 * 4096;
+		mainlight.shadow.mapSize.height = 2 * 4096;
 		mainlight.matrixAutoUpdate = false;
 		mainlight.updateMatrix();
 		scene.add(mainlight);
@@ -188,8 +188,8 @@ function init() {
 			mesh.updateMatrix();
 			scene.add(mesh);
 
-			const wireframe = new THREE.WireframeGeometry(geometry);
-			const line = new THREE.LineSegments(wireframe, wireframe_material);
+			const edges = new THREE.EdgesGeometry(geometry);
+			const line = new THREE.LineSegments(edges, edges_material);
 			line.matrixAutoUpdate = false;
 			line.updateMatrix();
 			scene.add(line);
