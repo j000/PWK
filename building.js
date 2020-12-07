@@ -3,30 +3,31 @@
 import * as THREE from './three.module.js';
 import { OrbitControls } from './OrbitControls.js';
 import { BufferGeometryUtils } from './BufferGeometryUtils.js';
+import { ConvexBufferGeometry } from './ConvexGeometry.js';
 // import { OutlineEffect } from './OutlineEffect.js';
 
 'use strict';
 
-const METER = 0.1; // skalowanie, bo inaczej mgła dziwnie wygląda
-const MAX_STEPS = 5;
+const METER = 0.15; // skalowanie, bo inaczej mgła dziwnie wygląda
+const MAX_STEPS = 8;
 const MAX_FLOORS = 70;
 
 const FLOOR = 3.5 * METER;
-const GRID = 40 * METER;
+const GRID = 60 * METER;
 const STREET = (3.5 * 4 + 1.75 * 2) * METER;
 
-const COLOR_BACKGROUND = 0x03004b;
-const COLOR_MATERIAL = 0xffffff;
-const COLOR_LIGHT_MAIN =  0xfa73f4;// 0xffffff;
-const COLOR_LIGHT_AMBIENT = new THREE.Color("hsl(294, 40%, 40%)").getHex();
-// const COLOR_LIGHT_SECONDARY = new THREE.Color("hsl(169, 60%, 40%)").getHex();
-const COLOR_LIGHT_SECONDARY = 0xde4ae0;
-const COLOR_EMISSIVE = 0x167f7d; // 0x2aefee;
+const COLOR_BACKGROUND = new THREE.Color("hsl(242, 40%, 20%)");
+const COLOR_MATERIAL = new THREE.Color("hsl(0, 0%, 75%)");
+const COLOR_WIREFRAME = COLOR_BACKGROUND;
+const COLOR_EMISSIVE = new THREE.Color("hsl(180, 70%, 15%)");
+const COLOR_LIGHT_MAIN =  new THREE.Color("hsl(48, 85%, 84%)");
+const COLOR_LIGHT_AMBIENT = new THREE.Color("hsl(242, 00%, 40%)");
 
 const N = 30;
 
 ////////////////////////////////////////
-var camera, controls, scene, renderer, global_material;
+var camera, controls, scene, renderer, global_material, wireframe_material;
+var mainlight;
 
 ////////////////////////////////////////
 // random int between min and max, inclusive
@@ -36,36 +37,36 @@ function getRandomInt(min, max) {
 	return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
-function getRandom(min, max) {
+function getRandom(min = 0, max = 1.0) {
 	return Math.random() * (max - min) + min;
 }
 
-function polygon(x) {
-	const out = new THREE.Shape();
-	const angle = Math.PI * 2 / x;
-	out.moveTo(
-		Math.sin(0),
-		Math.cos(0)
-	);
-	for (var i = 1; i <= x; ++i) {
-		out.lineTo(
-			Math.sin(i * angle),
-			Math.cos(i * angle)
-		);
-	}
-	return out;
-}
+// function polygon(x) {
+// 	const out = new THREE.Shape();
+// 	const angle = Math.PI * 2 / x;
+// 	out.moveTo(
+// 		Math.sin(0),
+// 		Math.cos(0)
+// 	);
+// 	for (var i = 1; i <= x; ++i) {
+// 		out.lineTo(
+// 			Math.sin(i * angle),
+// 			Math.cos(i * angle)
+// 		);
+// 	}
+// 	return out;
+// }
 
 class Segment {
 	constructor() {
-		// TODO: zmien nazwe
-		this.N = getRandomInt(3, 8);
-		this.height = getRandomInt(5, MAX_FLOORS);
-		this.angle = getRandom(0, Math.PI * 2);
-		this.scale_x = getRandom(0.1, 1.0);
-		this.scale_y = getRandom(0.1, 1.0);
-		this.offset_x = getRandom(0.0, 1.0 - this.scale_x);
-		this.offset_y = getRandom(0.0, 1.0 - this.scale_y);
+		this.height = getRandomInt(2, MAX_FLOORS) * FLOOR;
+		var N = getRandomInt(3, 8);
+		this.point_x = [];
+		this.point_y = [];
+		for (var i = 0; i < N; ++i) {
+			this.point_x.push(getRandom(0, GRID));
+			this.point_y.push(getRandom(0, GRID));
+		}
 	}
 }
 
@@ -74,63 +75,47 @@ class Genotyp {
 		this.levels = [];
 		const limit = getRandomInt(1, MAX_STEPS);
 		for (var i = 0; i < limit; ++i) {
-			// TODO center
-			var segment = new Segment();
-			this.levels.push(segment);
+			this.levels.push(new Segment());
 		}
 	}
 }
 
+function shape(height, x, y) {
+	var points = [];
+	for (var i = 0; i < x.length; ++i) {
+		points.push(new THREE.Vector3(x[i], 0, y[i]));
+		points.push(new THREE.Vector3(x[i], height, y[i]));
+	}
+	const geometry = new ConvexBufferGeometry(points);
+	return geometry;
+}
+
 function building(genotyp) {
-	const extrudeSettings = {depth: 2, bevelEnabled: false};
 	const geometries = [];
 	for (var i = 0; i < genotyp.levels.length; ++i) {
 		const segment = genotyp.levels[i];
-		const shape = polygon(segment.N);
-		const geometry = new THREE.ExtrudeBufferGeometry(
-			shape,
-			extrudeSettings
+		const geometry = shape(
+			segment.height,
+			segment.point_x,
+			segment.point_y
 		);
-		geometry.rotateX(Math.PI / 2);
-		geometry.translate(0, 2, 0);
-		geometry.scale(0.5, 0.5, 0.5);
-
-		// const geometry = new THREE.BoxBufferGeometry(1, 1, 1);
-		// geometry.translate(0, 0.5, 0);
-		// geometry.scale(1./Math.SQRT2, 1., 1./Math.SQRT2);
-
-		geometry.scale(
-			segment.scale_x * GRID,
-			FLOOR * segment.height,
-			segment.scale_y * GRID
-		);
-		// geometry.translate(
-		// 	GRID / 2, //(0.5 + segment.offset_x) * GRID,
-		// 	0,
-		// 	GRID / 2 //(0.5 + segment.offset_y) * GRID
-		// );
-		geometry.rotateY(segment.angle);
 		geometries.push(geometry);
 	}
 
 	const mergedGeometry = BufferGeometryUtils.mergeBufferGeometries(geometries, false);
-	// mergedGeometry.translate(GRID / 2, 0, GRID / 2);
-	var mesh = new THREE.Mesh(mergedGeometry, global_material);
-	mesh.castShadow = true;
-	mesh.receiveShadow = true;
-	mesh.matrixAutoUpdate = false;
-	mesh.updateMatrix();
-
-	return mesh;
+	return mergedGeometry;
 }
 
 function init() {
-	// global_material = new THREE.MeshPhongMaterial({ color: COLOR_MATERIAL });
-	// global_material = new THREE.MeshToonMaterial({ color: COLOR_MATERIAL });
 	global_material = new THREE.MeshLambertMaterial({
 		color: COLOR_MATERIAL,
 		emissive: COLOR_EMISSIVE,
-		emissiveIntensity: 0.66
+		emissiveIntensity: 1.0,
+	});
+	wireframe_material = new THREE.LineBasicMaterial({
+		color: COLOR_WIREFRAME,
+		opacity: 0.25,
+		transparent: true,
 	});
 
 
@@ -164,62 +149,67 @@ function init() {
 	// lights
 
 	{
-		var light = new THREE.DirectionalLight(COLOR_LIGHT_MAIN, 0.9);
-		light.position.set(0, 1000, 1000);
-		light.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 6);
+		mainlight = new THREE.DirectionalLight(COLOR_LIGHT_MAIN, 0.9);
+		mainlight.position.set(0, 1000 * METER, 1000 * METER);
+		mainlight.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 6);
 
-		light.castShadow = true;
-		light.shadow.camera.near = 1 * METER;
-		light.shadow.camera.far = 10000 * METER;
-		light.shadow.camera.left = -1000 * METER;
-		light.shadow.camera.right = 1000 * METER;
-		light.shadow.camera.bottom = -1000 * METER;
-		light.shadow.camera.top = 1000 * METER;
+		mainlight.castShadow = true;
+		mainlight.shadow.camera.left = -2 * GRID * N;
+		mainlight.shadow.camera.right = 2 * GRID * N;
+		mainlight.shadow.camera.bottom = -2 * GRID * N;
+		mainlight.shadow.camera.top = 2 * GRID * N;
 
-		light.shadow.mapSize.width = 4096;
-		light.shadow.mapSize.height = 4096;
-		light.matrixAutoUpdate = false;
-		light.updateMatrix();
-		scene.add(light);
+		mainlight.shadow.mapSize.width = 4096;
+		mainlight.shadow.mapSize.height = 4096;
+		mainlight.matrixAutoUpdate = false;
+		mainlight.updateMatrix();
+		scene.add(mainlight);
 	}
 
-	{
-		// var light = new THREE.DirectionalLight(COLOR_LIGHT_SECONDARY, 0.8);
-		var light = new THREE.DirectionalLight(COLOR_LIGHT_SECONDARY, 0.8);
-		light.position.set(0, -1, -1);
-		light.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 6);
-		light.matrixAutoUpdate = false;
-		light.updateMatrix();
-		scene.add(light);
-	}
-
-	scene.add(new THREE.AmbientLight(COLOR_LIGHT_AMBIENT, 0.6));
+	scene.add(new THREE.AmbientLight(COLOR_LIGHT_AMBIENT, 1.0));
 
 	// world
-
-	var geo = new THREE.PlaneBufferGeometry(10000, 10000);
-	geo.translate(0, -1./1024, 0);
-	geo.rotateX(Math.PI / -2);
-	geo = new THREE.Mesh(
-		geo,
-		global_material
-	);
-	geo.receiveShadow = true;
-	geo.matrixAutoUpdate = false;
-	geo.updateMatrix();
-	// scene.add(geo);
+	{
+		var geo = new THREE.PlaneBufferGeometry(10000, 10000);
+		geo.translate(0, -1./1024, 0);
+		geo.rotateX(Math.PI / -2);
+		geo = new THREE.Mesh(
+			geo,
+			global_material
+		);
+		geo.receiveShadow = true;
+		geo.matrixAutoUpdate = false;
+		geo.updateMatrix();
+		scene.add(geo);
+	}
 
 	for (var i = -N; i <= N; ++i)
 		for (var j = -N; j <= N; ++j) {
-			var mesh = building(new Genotyp());
-			mesh.position.x = Math.floor(i / 2) * STREET + i * GRID;
-			mesh.position.z = Math.floor(j / 2) * STREET + j * GRID;
+			const geometry = building(new Genotyp());
+			geometry.translate(
+				Math.floor(i / 2) * STREET + i * (GRID + 2 * METER),
+				0,
+				Math.floor(j / 2) * STREET + j * (GRID + 2 * METER)
+			);
+
+			const mesh = new THREE.Mesh(geometry, global_material);
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
+			mesh.matrixAutoUpdate = false;
+
 			mesh.updateMatrix();
 			scene.add(mesh);
 
+			const wireframe = new THREE.WireframeGeometry(geometry);
+			const line = new THREE.LineSegments(wireframe, wireframe_material);
+			line.matrixAutoUpdate = false;
+			line.updateMatrix();
+			scene.add(line);
+
+
 			// const axesHelper = new THREE.AxesHelper(GRID);
-			// axesHelper.position.x = mesh.position.x + GRID / 2;
-			// axesHelper.position.z = mesh.position.z + GRID / 2;
+			// axesHelper.position.x = Math.floor(i / 2) * STREET + i * GRID;
+			// axesHelper.position.z = Math.floor(j / 2) * STREET + j * GRID;
 			// scene.add(axesHelper);
 		}
 
