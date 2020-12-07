@@ -1,10 +1,7 @@
-// import * as THREE from 'https://unpkg.com/three/build/three.module.js';
-// import { OrbitControls } from 'https://unpkg.com/three/examples/jsm/controls/OrbitControls.js';
 import * as THREE from './three.module.js';
 import { OrbitControls } from './OrbitControls.js';
 import { BufferGeometryUtils } from './BufferGeometryUtils.js';
 import { ConvexBufferGeometry } from './ConvexGeometry.js';
-// import { OutlineEffect } from './OutlineEffect.js';
 
 'use strict';
 
@@ -40,22 +37,6 @@ function getRandomInt(min, max) {
 function getRandom(min = 0, max = 1.0) {
 	return Math.random() * (max - min) + min;
 }
-
-// function polygon(x) {
-// 	const out = new THREE.Shape();
-// 	const angle = Math.PI * 2 / x;
-// 	out.moveTo(
-// 		Math.sin(0),
-// 		Math.cos(0)
-// 	);
-// 	for (var i = 1; i <= x; ++i) {
-// 		out.lineTo(
-// 			Math.sin(i * angle),
-// 			Math.cos(i * angle)
-// 		);
-// 	}
-// 	return out;
-// }
 
 class Segment {
 	constructor() {
