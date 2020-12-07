@@ -25,6 +25,7 @@ const N = 30;
 ////////////////////////////////////////
 var camera, controls, scene, renderer, global_material, wireframe_material;
 var mainlight;
+var genotypy = [];
 
 ////////////////////////////////////////
 // random int between min and max, inclusive
@@ -164,9 +165,15 @@ function init() {
 		scene.add(geo);
 	}
 
+	for (var i = -N; i <= N; ++i) {
+		genotypy[i] = [];
+		for (var j = -N; j <= N; ++j)
+			genotypy[i][j] = new Genotyp();
+	}
+
 	for (var i = -N; i <= N; ++i)
 		for (var j = -N; j <= N; ++j) {
-			const geometry = building(new Genotyp());
+			const geometry = building(genotypy[i][j]);
 			geometry.translate(
 				Math.floor(i / 2) * STREET + i * (GRID + 2 * METER),
 				0,
