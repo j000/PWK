@@ -5,26 +5,44 @@ import { ConvexBufferGeometry } from './ConvexGeometry.js';
 
 'use strict';
 
-const METER = 0.15; // skalowanie, bo inaczej mgła dziwnie wygląda
+const METER = 1. / 8; // skalowanie, bo inaczej mgła dziwnie wygląda
 const MAX_STEPS = 8;
-const MAX_FLOORS = 70;
+const MAX_FLOORS = 80;
 
-const FLOOR = 3.5 * METER;
+const FLOOR = 3.25 * METER;
 const GRID = 60 * METER;
 const STREET = (3.5 * 4 + 1.75 * 2) * METER;
+const SPACING = 3 * METER;
+const GRIDS_PER_BLOCK_X = 3;
+const GRIDS_PER_BLOCK_Y = 2;
 
 const COLOR_BACKGROUND = new THREE.Color("hsl(242, 40%, 20%)");
 const COLOR_MATERIAL = new THREE.Color("hsl(0, 0%, 75%)");
 const COLOR_EDGES = COLOR_BACKGROUND;
 const COLOR_EMISSIVE = new THREE.Color("hsl(180, 70%, 15%)");
 const COLOR_LIGHT_MAIN =  new THREE.Color("hsl(48, 85%, 84%)");
-const COLOR_LIGHT_AMBIENT = new THREE.Color("hsl(242, 00%, 40%)");
+const COLOR_LIGHT_AMBIENT = new THREE.Color("hsl(242, 00%, 50%)");
+const FOG = 1. / (128 + 64);
 
 const N = 30;
 
 ////////////////////////////////////////
-var camera, controls, scene, renderer, global_material, edges_material;
+const global_material = new THREE.MeshLambertMaterial({
+	color: COLOR_MATERIAL,
+	emissive: COLOR_EMISSIVE,
+	emissiveIntensity: 1.0,
+});
+const edges_material = new THREE.LineBasicMaterial({
+	color: COLOR_EDGES,
+	opacity: 0.25,
+	transparent: true,
+});
+
+////////////////////////////////////////
+var camera, controls, scene, renderer;
 var mainlight;
+
+////////////////////////////////////////
 var genotypy = [];
 
 ////////////////////////////////////////
@@ -35,7 +53,7 @@ function getRandomInt(min, max) {
 	return Math.floor(Math.random() * (max - min + 1) + min);
 }
 
-function getRandom(min = 0, max = 1.0) {
+function getRandom(min = 0., max = 1.) {
 	return Math.random() * (max - min) + min;
 }
 
@@ -89,21 +107,9 @@ function building(genotyp) {
 }
 
 function init() {
-	global_material = new THREE.MeshLambertMaterial({
-		color: COLOR_MATERIAL,
-		emissive: COLOR_EMISSIVE,
-		emissiveIntensity: 1.0,
-	});
-	edges_material = new THREE.LineBasicMaterial({
-		color: COLOR_EDGES,
-		opacity: 0.25,
-		transparent: true,
-	});
-
-
 	scene = new THREE.Scene();
 	scene.background = new THREE.Color(COLOR_BACKGROUND);
-	scene.fog = new THREE.FogExp2(scene.background, 1. / 256);
+	scene.fog = new THREE.FogExp2(scene.background, FOG);
 
 	renderer = new THREE.WebGLRenderer({ antialias: true });
 	renderer.setPixelRatio(window.devicePixelRatio);
@@ -136,13 +142,16 @@ function init() {
 		mainlight.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 6);
 
 		mainlight.castShadow = true;
-		mainlight.shadow.camera.left = -2 * GRID * N;
-		mainlight.shadow.camera.right = 2 * GRID * N;
-		mainlight.shadow.camera.bottom = -2 * GRID * N;
-		mainlight.shadow.camera.top = 2 * GRID * N;
+		const shadow_range = 2 * (GRID + SPACING + STREET / Math.min(GRIDS_PER_BLOCK_X, GRIDS_PER_BLOCK_Y)) * N * Math.SQRT2;
+		mainlight.shadow.camera.near = -shadow_range;
+		mainlight.shadow.camera.far = shadow_range;
+		mainlight.shadow.camera.left = -shadow_range;
+		mainlight.shadow.camera.right = shadow_range;
+		mainlight.shadow.camera.bottom = -shadow_range;
+		mainlight.shadow.camera.top = shadow_range;
 
-		mainlight.shadow.mapSize.width = 2 * 4096;
-		mainlight.shadow.mapSize.height = 2 * 4096;
+		mainlight.shadow.mapSize.width = 8 * 1024;
+		mainlight.shadow.mapSize.height = 8 * 1024;
 		mainlight.matrixAutoUpdate = false;
 		mainlight.updateMatrix();
 		scene.add(mainlight);
@@ -153,8 +162,8 @@ function init() {
 	// world
 	{
 		var geo = new THREE.PlaneBufferGeometry(10000, 10000);
-		geo.translate(0, -1./1024, 0);
 		geo.rotateX(Math.PI / -2);
+		geo.translate(0, -1 * METER, 0);
 		geo = new THREE.Mesh(
 			geo,
 			global_material
@@ -175,16 +184,15 @@ function init() {
 		for (var j = -N; j <= N; ++j) {
 			const geometry = building(genotypy[i][j]);
 			geometry.translate(
-				Math.floor(i / 2) * STREET + i * (GRID + 2 * METER),
+				Math.floor(i / GRIDS_PER_BLOCK_X) * STREET + i * (GRID + SPACING + GRIDS_PER_BLOCK_X * METER),
 				0,
-				Math.floor(j / 2) * STREET + j * (GRID + 2 * METER)
+				Math.floor(j / GRIDS_PER_BLOCK_Y) * STREET + j * (GRID + SPACING + GRIDS_PER_BLOCK_Y * METER)
 			);
 
 			const mesh = new THREE.Mesh(geometry, global_material);
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
 			mesh.matrixAutoUpdate = false;
-
 			mesh.updateMatrix();
 			scene.add(mesh);
 
@@ -193,12 +201,6 @@ function init() {
 			line.matrixAutoUpdate = false;
 			line.updateMatrix();
 			scene.add(line);
-
-
-			// const axesHelper = new THREE.AxesHelper(GRID);
-			// axesHelper.position.x = Math.floor(i / 2) * STREET + i * GRID;
-			// axesHelper.position.z = Math.floor(j / 2) * STREET + j * GRID;
-			// scene.add(axesHelper);
 		}
 
 	window.addEventListener('resize', onWindowResize, false);
