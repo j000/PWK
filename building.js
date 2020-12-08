@@ -57,9 +57,28 @@ function getRandom(min = 0., max = 1.) {
 	return Math.random() * (max - min) + min;
 }
 
+function getNormal(mean = 0.5, deviation = 0.5) {
+	var u = 0, v = 0;
+    do {
+		u = Math.random();
+	} while (u == 0);
+    do {
+		v = Math.random();
+	} while (v == 0);
+    return mean + deviation * Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+function getNormalInRange(min = 0., max = 1.) {
+	var out;
+	do {
+		out = getNormal((min + max) / 2, (max - min) / 4);
+	} while (out < min || out > max);
+	return out;
+}
+
 class Segment {
 	constructor() {
-		this.height = getRandomInt(2, MAX_FLOORS) * FLOOR;
+		this.height = Math.floor(getNormalInRange(2, MAX_FLOORS)) * FLOOR;
 		var N = getRandomInt(3, 8);
 		this.point_x = [];
 		this.point_y = [];
