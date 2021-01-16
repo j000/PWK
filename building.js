@@ -2,11 +2,13 @@ import * as THREE from './three.module.js';
 import { OrbitControls } from './OrbitControls.js';
 import { BufferGeometryUtils } from './BufferGeometryUtils.js';
 import { ConvexBufferGeometry } from './ConvexGeometry.js';
+import { ConvexGeometry } from './ConvexGeometry.js';
+import './polybool.min.js';
 
 'use strict';
 
 const METER = 1. / 8; // skalowanie, bo inaczej mgła dziwnie wygląda
-const MAX_STEPS = 8;
+const MAX_SEGMENTS = 8;
 const MAX_FLOORS = 80;
 
 const FLOOR = 3.25 * METER;
@@ -79,50 +81,56 @@ function getNormalInRange(min = 0., max = 1.) {
 class Segment {
 	constructor() {
 		this.height = Math.floor(getNormalInRange(2, MAX_FLOORS)) * FLOOR;
-		var N = getRandomInt(3, 8);
 		this.point_x = [];
 		this.point_y = [];
+		const N = getRandomInt(3, 8);
 		for (var i = 0; i < N; ++i) {
 			this.point_x.push(getRandom(0, GRID));
 			this.point_y.push(getRandom(0, GRID));
 		}
+		this.createGeometry();
+	}
+
+	createGeometry() {
+		const x = this.point_x;
+		const y = this.point_y;
+		var polygon = { inverted: false, regions: [[]] };
+		var points = [];
+		for (var i = 0; i < x.length; ++i) {
+			points.push(new THREE.Vector3(x[i], 0, y[i]));
+			points.push(new THREE.Vector3(x[i], this.height, y[i]));
+		}
+		const geometry = new ConvexGeometry(points);
+		this.geometry = new THREE.BufferGeometry().fromGeometry(geometry);
+		for (var i = 0; i < geometry.vertices.length; ++i) {
+			if (geometry.vertices[i].y == 0)
+				polygon.regions[0].push([
+					geometry.vertices[i].x,
+					geometry.vertices[i].z
+				]);
+		}
+		this.polygon = new PolyBool.segments(polygon);
 	}
 }
 
 class Genotyp {
 	constructor() {
 		this.levels = [];
-		const limit = getRandomInt(1, MAX_STEPS);
+		const limit = getRandomInt(1, MAX_SEGMENTS);
 		for (var i = 0; i < limit; ++i) {
 			this.levels.push(new Segment());
 		}
 	}
-}
 
-function shape(height, x, y) {
-	var points = [];
-	for (var i = 0; i < x.length; ++i) {
-		points.push(new THREE.Vector3(x[i], 0, y[i]));
-		points.push(new THREE.Vector3(x[i], height, y[i]));
+	build() {
+		const geometries = [];
+		for (var i = 0; i < this.levels.length; ++i) {
+			geometries.push(this.levels[i].geometry);
+		}
+
+		const mergedGeometry = BufferGeometryUtils.mergeBufferGeometries(geometries, false);
+		return mergedGeometry;
 	}
-	const geometry = new ConvexBufferGeometry(points);
-	return geometry;
-}
-
-function building(genotyp) {
-	const geometries = [];
-	for (var i = 0; i < genotyp.levels.length; ++i) {
-		const segment = genotyp.levels[i];
-		const geometry = shape(
-			segment.height,
-			segment.point_x,
-			segment.point_y
-		);
-		geometries.push(geometry);
-	}
-
-	const mergedGeometry = BufferGeometryUtils.mergeBufferGeometries(geometries, false);
-	return mergedGeometry;
 }
 
 function init() {
@@ -201,7 +209,7 @@ function init() {
 
 	for (var i = -N; i <= N; ++i)
 		for (var j = -N; j <= N; ++j) {
-			const geometry = building(genotypy[i][j]);
+			const geometry = genotypy[i][j].build();
 			geometry.translate(
 				Math.floor(i / GRIDS_PER_BLOCK_X) * STREET + i * (GRID + SPACING + GRIDS_PER_BLOCK_X * METER),
 				0,
