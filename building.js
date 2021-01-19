@@ -29,6 +29,7 @@ const edges_material = new THREE.LineBasicMaterial({
 	transparent : true,
 });
 const wire_material = new THREE.MeshBasicMaterial({
+	color : COLOR_MATERIAL,
 	wireframe : true,
 	wireframeLinewidth : 0.25 * Config.METER,
 });
@@ -248,6 +249,7 @@ function pokolenie()
 	// krzyżowanie
 	const limit_dol = Math.ceil(list.length * Config.SELECTION);
 	const limit_gora = list.length - 1;
+	// najgorszy genotyp, jaki nie zostanie zmieniony
 	console.log('Zostaje: ' + list[limit_dol][0]);
 	for (var i = 0; i < limit_dol; ++i) {
 		const x = list[i][1];
@@ -256,18 +258,16 @@ function pokolenie()
 
 		if (old.fenotyp[2]) {
 			scene.remove(old.fenotyp[2]);
-			delete old.fenotyp[2];
 		}
 		if (old.fenotyp[1]) {
 			scene.remove(old.fenotyp[1]);
 			old.fenotyp[1].geometry.dispose();
-			delete old.fenotyp[1];
 		}
 		if (old.fenotyp[0]) {
 			scene.remove(old.fenotyp[0]);
 			old.fenotyp[0].geometry.dispose();
-			delete old.fenotyp[0];
 		}
+		delete old.fenotyp;
 
 		{
 			const parent1_idx = Utils.getRandomInt(limit_dol, limit_gora);
