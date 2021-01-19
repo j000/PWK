@@ -33,3 +33,8 @@ export function getNormalInRange(min = 0., max = 1.)
 	} while (out < min || out > max);
 	return out;
 }
+
+export function linear(x, x1, y1, x2, y2)
+{
+	return y2 + (x - x2) * (y2 - y1) / (x2 - x1);
+}

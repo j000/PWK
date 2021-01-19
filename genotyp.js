@@ -1,6 +1,7 @@
 import {BufferGeometryUtils} from './BufferGeometryUtils.js';
 import * as Config from './config.js';
 import {Segment} from './segment.js';
+import * as Utils from './utils.js';
 import {getRandomInt} from './utils.js';
 
 // Map.prototype.getOrDefault = function(key, value) {
@@ -10,20 +11,26 @@ import {getRandomInt} from './utils.js';
 // 	return value;
 
 export class Genotyp {
-	constructor()
+	constructor(copy)
 	{
-		this.levels = [];
+		if (copy instanceof Genotyp) {
+			this.segments = [...copy.segments ];
+			this.ocena = copy.ocena;
+			return;
+		}
+		this.segments = [];
 		const limit = getRandomInt(1, Config.MAX_SEGMENTS);
 		for (var i = 0; i < limit; ++i) {
-			this.levels.push(new Segment());
+			this.segments.push(new Segment());
 		}
+		this.ocen()
 	}
 
 	build()
 	{
 		const geometries = [];
-		for (var i = 0; i < this.levels.length; ++i) {
-			geometries.push(this.levels[i].geometry);
+		for (var i = 0; i < this.segments.length; ++i) {
+			geometries.push(this.segments[i].geometry);
 		}
 
 		const mergedGeometry
@@ -31,12 +38,16 @@ export class Genotyp {
 		return mergedGeometry;
 	}
 
+	////////////////////////////////////////
 	base_area()
 	{
-		// TODO
-		var segments = this.levels[0].segment;
-		for (var i = 1; i < this.levels.length; ++i) {
-			var comb = PolyBool.combine(segments, this.levels[i].segment);
+		var segments = this.segments[0].segment;
+		for (var i = 1; i < this.segments.length; ++i) {
+			try {
+				var comb = PolyBool.combine(segments, this.segments[i].segment);
+			} catch (e) {
+				continue;
+			}
 			segments = PolyBool.selectUnion(comb);
 		}
 		var poly = PolyBool.polygon(segments);
@@ -50,6 +61,50 @@ export class Genotyp {
 			area += region[region.length - 1][0] * region[0][1];
 			area -= region[0][0] * region[region.length - 1][1];
 		}
-		return Math.abs(area) / 2.;
+		return 1. - Math.abs(area) / 2. / (Config.GRID * Config.GRID);
+	}
+
+	segment_count()
+	{
+		return Utils.linear(this.segments.length, 1, 0, Config.MAX_SEGMENTS, 1);
+	}
+
+	height()
+	{
+		const max_height
+			= Math.max.apply(Math, this.segments.map((o) => o.height));
+		return Utils.linear(
+			max_height, 0, 0, Config.MAX_FLOORS * Config.FLOOR, 1);
+	}
+
+	ocen()
+	{
+		this.ocena = this.base_area() * this.segment_count() * this.height();
+	}
+
+	////////////////////////////////////////
+	krzyzuj(other)
+	{
+		var out = new Genotyp(this);
+		out.segments = [];
+		var all_segments = this.segments.concat(other.segments);
+		const limit = getRandomInt(
+			1, Math.min(Config.MAX_SEGMENTS, all_segments.length));
+		for (var i = 0; i < limit; ++i) {
+			const which = Utils.getRandomInt(0, all_segments.length - 1);
+			out.segments.push(all_segments.splice(which, 1)[0]);
+		}
+		out.ocen();
+		return out;
+	}
+
+	mutuj()
+	{
+		if (Utils.getRandom() >= Config.MUTATION) {
+			return;
+		}
+		const which = Utils.getRandomInt(0, this.segments.length - 1);
+		this.segments[which] = new Segment();
+		this.ocen();
 	}
 }

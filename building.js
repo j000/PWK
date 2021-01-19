@@ -53,6 +53,7 @@ function init()
 		60, window.innerWidth / window.innerHeight, 1, 1000);
 	camera.position.setFromSphericalCoords(
 		Config.METER * 1500, Math.PI / 4, -3 * Math.PI / 4);
+	camera.layers.enable(0);
 
 	// controls
 
@@ -73,6 +74,8 @@ function init()
 
 	{
 		mainlight = new THREE.DirectionalLight(COLOR_LIGHT_MAIN, 0.9);
+		mainlight.layers.enable(0);
+		mainlight.layers.enable(1);
 		mainlight.position.set(0, 1000 * Config.METER, 1000 * Config.METER);
 		mainlight.position.applyAxisAngle(
 			new THREE.Vector3(0, 1, 0), Math.PI / 6);
@@ -90,11 +93,12 @@ function init()
 		mainlight.shadow.camera.right = shadow_range;
 		mainlight.shadow.camera.bottom = -shadow_range;
 		mainlight.shadow.camera.top = shadow_range;
-
 		mainlight.shadow.mapSize.width = 8 * 1024;
 		mainlight.shadow.mapSize.height = 8 * 1024;
+
 		mainlight.matrixAutoUpdate = false;
 		mainlight.updateMatrix();
+
 		scene.add(mainlight);
 	}
 
@@ -106,49 +110,58 @@ function init()
 		geo.rotateX(Math.PI / -2);
 		geo.translate(0, -1 * Config.METER, 0);
 		geo = new THREE.Mesh(geo, global_material);
+		geo.layers.enable(0);
+		geo.layers.enable(1);
 		geo.receiveShadow = true;
 		geo.matrixAutoUpdate = false;
 		geo.updateMatrix();
 		scene.add(geo);
 	}
 
+	window.addEventListener('resize', onWindowResize, false);
+	document.addEventListener('keydown', onDocumentKeyDown, false);
+	window.setInterval(onInterval, 500);
+
 	for (var i = -Config.N; i <= Config.N; ++i) {
 		genotypy[i] = [];
-		for (var j = -Config.N; j <= Config.N; ++j)
-			genotypy[i][j] = new Genotyp();
-	}
-
-	for (var i = -Config.N; i <= Config.N; ++i)
 		for (var j = -Config.N; j <= Config.N; ++j) {
-			const geometry = genotypy[i][j].build();
-			console.log(
-				genotypy[i][j].base_area() / (Config.GRID * Config.GRID));
-			geometry.translate(
-				Math.floor(i / Config.GRIDS_PER_BLOCK_X) * Config.STREET
-					+ i
-						* (Config.GRID + Config.SPACING
-						   + Config.GRIDS_PER_BLOCK_X * Config.METER),
-				0,
-				Math.floor(j / Config.GRIDS_PER_BLOCK_Y) * Config.STREET
-					+ j
-						* (Config.GRID + Config.SPACING
-						   + Config.GRIDS_PER_BLOCK_Y * Config.METER));
-
-			const mesh = new THREE.Mesh(geometry, global_material);
-			mesh.castShadow = true;
-			mesh.receiveShadow = true;
-			mesh.matrixAutoUpdate = false;
-			mesh.updateMatrix();
-			scene.add(mesh);
-
-			const edges = new THREE.EdgesGeometry(geometry);
-			const line = new THREE.LineSegments(edges, edges_material);
-			line.matrixAutoUpdate = false;
-			line.updateMatrix();
-			scene.add(line);
+			genotypy[i][j] = new Genotyp();
+			draw(i, j);
 		}
+	}
+}
 
-	window.addEventListener('resize', onWindowResize, false);
+function draw(i, j)
+{
+	const geometry = genotypy[i][j].build();
+
+	geometry.translate(
+		Math.floor(i / Config.GRIDS_PER_BLOCK_X) * Config.STREET
+			+ i
+				* (Config.GRID + Config.SPACING
+				   + Config.GRIDS_PER_BLOCK_X * Config.METER),
+		0,
+		Math.floor(j / Config.GRIDS_PER_BLOCK_Y) * Config.STREET
+			+ j
+				* (Config.GRID + Config.SPACING
+				   + Config.GRIDS_PER_BLOCK_Y * Config.METER));
+
+	const mesh = new THREE.Mesh(geometry, global_material);
+	mesh.castShadow = true;
+	mesh.receiveShadow = true;
+	mesh.matrixAutoUpdate = false;
+	mesh.updateMatrix();
+	mesh.layers.set(0);
+	scene.add(mesh);
+	genotypy[i][j].fenotyp = mesh;
+
+	const edges = new THREE.EdgesGeometry(geometry);
+	const line = new THREE.LineSegments(edges, edges_material);
+	line.matrixAutoUpdate = false;
+	line.updateMatrix();
+	line.layers.set(1);
+	scene.add(line);
+	genotypy[i][j].fenotyp2 = line;
 }
 
 function onWindowResize()
@@ -163,8 +176,90 @@ function animate()
 {
 	requestAnimationFrame(animate);
 	controls.update();
-
 	renderer.render(scene, camera);
+}
+
+function onDocumentKeyDown(event)
+{
+	const key = event.key;
+	// space
+	if (key == ' ') {
+		generations = 1;
+	} else if (key == 'Enter') {
+		generations = Config.GENERATIONS;
+	} else if (key == 'Home') {
+		renderer.shadowMap.enabled = !renderer.shadowMap.enabled;
+		scene.traverse((child) => {
+			if (child.material)
+				child.material.needsUpdate = true;
+		});
+	} else if (key == 'End' || key == '2') {
+		camera.layers.toggle(1);
+	} else if (key == '1') {
+		camera.layers.toggle(0);
+	}
+	// console.log('renderer.info.memory: ', renderer.info.memory);
+};
+
+var generations = 0;
+function onInterval()
+{
+	if (generations <= 0) {
+		// camera.layers.enable(1);
+		return;
+	}
+	--generations;
+	// camera.layers.disable(1);
+	pokolenie();
+	animate();
+}
+
+function pokolenie()
+{
+	// selekcja
+	var list = [];
+	for (var i = -Config.N; i <= Config.N; ++i)
+		for (var j = -Config.N; j <= Config.N; ++j) {
+			list.push([ genotypy[i][j].ocena, i, j ]);
+		}
+	list.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+	// krzyżowanie
+	const limit_dol = Math.ceil(list.length * Config.SELECTION);
+	const limit_gora = list.length - 1;
+	console.log('Zostaje: ' + list[limit_dol][0]);
+	for (var i = 0; i < limit_dol; ++i) {
+		const x = list[i][1];
+		const y = list[i][2];
+		const old = genotypy[x][y];
+
+		if (old.fenotyp) {
+			scene.remove(old.fenotyp);
+			old.fenotyp.geometry.dispose();
+			delete old.fenotyp.material;
+			delete old.fenotyp;
+		}
+		if (old.fenotyp2) {
+			scene.remove(old.fenotyp2);
+			old.fenotyp2.geometry.dispose();
+			delete old.fenotyp2.material;
+			delete old.fenotyp2;
+		}
+
+		const parent1_idx = Utils.getRandomInt(limit_dol, limit_gora);
+		const parent2_idx = Utils.getRandomInt(limit_dol, limit_gora);
+		const x1 = list[parent1_idx][1];
+		const y1 = list[parent1_idx][2];
+		const x2 = list[parent2_idx][1];
+		const y2 = list[parent2_idx][2];
+		const parent1 = genotypy[x1][y1];
+		const parent2 = genotypy[x2][y2];
+		genotypy[x][y] = parent1.krzyzuj(parent2);
+		genotypy[x][y].mutuj();
+		// genotypy[x][y] = new Genotyp();
+		draw(x, y);
+	}
+
+	renderer.renderLists.dispose();
 }
 
 ////////////////////////////////////////
