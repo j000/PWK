@@ -3,6 +3,7 @@ import './polybool.min.js';
 import * as Config from './config.js';
 import {Genotyp} from './genotyp.js';
 import {OrbitControls} from './OrbitControls.js';
+import Stats from './stats.module.js';
 import * as THREE from './three.module.js';
 import * as Utils from './utils.js';
 
@@ -27,9 +28,13 @@ const edges_material = new THREE.LineBasicMaterial({
 	opacity : 0.25,
 	transparent : true,
 });
+const wire_material = new THREE.MeshBasicMaterial({
+	wireframe : true,
+	wireframeLinewidth : 0.25 * Config.METER,
+});
 
 ////////////////////////////////////////
-var camera, controls, scene, renderer;
+var camera, controls, scene, renderer, stats;
 var mainlight;
 ////////////////////////////////////////
 
@@ -76,6 +81,7 @@ function init()
 		mainlight = new THREE.DirectionalLight(COLOR_LIGHT_MAIN, 0.9);
 		mainlight.layers.enable(0);
 		mainlight.layers.enable(1);
+		mainlight.layers.enable(2);
 		mainlight.position.set(0, 1000 * Config.METER, 1000 * Config.METER);
 		mainlight.position.applyAxisAngle(
 			new THREE.Vector3(0, 1, 0), Math.PI / 6);
@@ -102,7 +108,15 @@ function init()
 		scene.add(mainlight);
 	}
 
-	scene.add(new THREE.AmbientLight(COLOR_LIGHT_AMBIENT, 1.0));
+	{
+		const ambient = new THREE.AmbientLight(COLOR_LIGHT_AMBIENT, 1.0);
+		ambient.matrixAutoUpdate = false;
+		ambient.updateMatrix();
+		ambient.layers.enable(0);
+		ambient.layers.enable(1);
+		ambient.layers.enable(2);
+		scene.add(ambient);
+	}
 
 	// world
 	{
@@ -117,6 +131,9 @@ function init()
 		geo.updateMatrix();
 		scene.add(geo);
 	}
+
+	stats = new Stats();
+	document.body.appendChild(stats.dom);
 
 	window.addEventListener('resize', onWindowResize, false);
 	document.addEventListener('keydown', onDocumentKeyDown, false);
@@ -133,7 +150,10 @@ function init()
 
 function draw(i, j)
 {
+	if (genotypy[i][j].fenotyp)
+		return;
 	const geometry = genotypy[i][j].build();
+	genotypy[i][j].fenotyp = [];
 
 	geometry.translate(
 		Math.floor(i / Config.GRIDS_PER_BLOCK_X) * Config.STREET
@@ -153,7 +173,7 @@ function draw(i, j)
 	mesh.updateMatrix();
 	mesh.layers.set(0);
 	scene.add(mesh);
-	genotypy[i][j].fenotyp = mesh;
+	genotypy[i][j].fenotyp[0] = mesh;
 
 	const edges = new THREE.EdgesGeometry(geometry);
 	const line = new THREE.LineSegments(edges, edges_material);
@@ -161,7 +181,12 @@ function draw(i, j)
 	line.updateMatrix();
 	line.layers.set(1);
 	scene.add(line);
-	genotypy[i][j].fenotyp2 = line;
+	genotypy[i][j].fenotyp[1] = line;
+
+	const wire = new THREE.Mesh(geometry, wire_material);
+	scene.add(wire);
+	wire.layers.set(2);
+	genotypy[i][j].fenotyp[2] = wire;
 }
 
 function onWindowResize()
@@ -177,6 +202,7 @@ function animate()
 	requestAnimationFrame(animate);
 	controls.update();
 	renderer.render(scene, camera);
+	stats.update();
 }
 
 function onDocumentKeyDown(event)
@@ -187,31 +213,27 @@ function onDocumentKeyDown(event)
 		generations = 1;
 	} else if (key == 'Enter') {
 		generations = Config.GENERATIONS;
-	} else if (key == 'Home') {
+	} else if (key == 'q' || key == 'Home') {
 		renderer.shadowMap.enabled = !renderer.shadowMap.enabled;
 		scene.traverse((child) => {
 			if (child.material)
 				child.material.needsUpdate = true;
 		});
-	} else if (key == 'End' || key == '2') {
+	} else if (key == 'End') {
 		camera.layers.toggle(1);
-	} else if (key == '1') {
-		camera.layers.toggle(0);
+	} else if (key >= '1' && key <= '9') {
+		camera.layers.toggle(event.keyCode - 49);
 	}
-	// console.log('renderer.info.memory: ', renderer.info.memory);
 };
 
 var generations = 0;
 function onInterval()
 {
 	if (generations <= 0) {
-		// camera.layers.enable(1);
 		return;
 	}
 	--generations;
-	// camera.layers.disable(1);
 	pokolenie();
-	animate();
 }
 
 function pokolenie()
@@ -232,28 +254,32 @@ function pokolenie()
 		const y = list[i][2];
 		const old = genotypy[x][y];
 
-		if (old.fenotyp) {
-			scene.remove(old.fenotyp);
-			old.fenotyp.geometry.dispose();
-			delete old.fenotyp.material;
-			delete old.fenotyp;
+		if (old.fenotyp[2]) {
+			scene.remove(old.fenotyp[2]);
+			delete old.fenotyp[2];
 		}
-		if (old.fenotyp2) {
-			scene.remove(old.fenotyp2);
-			old.fenotyp2.geometry.dispose();
-			delete old.fenotyp2.material;
-			delete old.fenotyp2;
+		if (old.fenotyp[1]) {
+			scene.remove(old.fenotyp[1]);
+			old.fenotyp[1].geometry.dispose();
+			delete old.fenotyp[1];
+		}
+		if (old.fenotyp[0]) {
+			scene.remove(old.fenotyp[0]);
+			old.fenotyp[0].geometry.dispose();
+			delete old.fenotyp[0];
 		}
 
-		const parent1_idx = Utils.getRandomInt(limit_dol, limit_gora);
-		const parent2_idx = Utils.getRandomInt(limit_dol, limit_gora);
-		const x1 = list[parent1_idx][1];
-		const y1 = list[parent1_idx][2];
-		const x2 = list[parent2_idx][1];
-		const y2 = list[parent2_idx][2];
-		const parent1 = genotypy[x1][y1];
-		const parent2 = genotypy[x2][y2];
-		genotypy[x][y] = parent1.krzyzuj(parent2);
+		{
+			const parent1_idx = Utils.getRandomInt(limit_dol, limit_gora);
+			const parent2_idx = Utils.getRandomInt(limit_dol, limit_gora);
+			const x1 = list[parent1_idx][1];
+			const y1 = list[parent1_idx][2];
+			const x2 = list[parent2_idx][1];
+			const y2 = list[parent2_idx][2];
+			const parent1 = genotypy[x1][y1];
+			const parent2 = genotypy[x2][y2];
+			genotypy[x][y] = parent1.krzyzuj(parent2);
+		}
 		genotypy[x][y].mutuj();
 		// genotypy[x][y] = new Genotyp();
 		draw(x, y);

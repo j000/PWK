@@ -1,7 +1,7 @@
-export const N = 10;
-export const MUTATION = 0.03;
-export const GENERATIONS = 30;
-export const SELECTION = 0.3;
+export const N = 30;
+export const MUTATION = 0.04;
+export const GENERATIONS = 40;
+export const SELECTION = 0.5;
 
 export const MAX_SEGMENTS = 8;
 export const MAX_FLOORS = 80;

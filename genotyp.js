@@ -54,6 +54,8 @@ export class Genotyp {
 		var area = 0.;
 		for (var idx in poly.regions) {
 			const region = poly.regions[idx];
+			if (!region.length)
+				continue;
 			for (var i = 1; i < region.length; ++i) {
 				area += region[i - 1][0] * region[i][1];
 				area -= region[i][0] * region[i - 1][1];
@@ -61,16 +63,20 @@ export class Genotyp {
 			area += region[region.length - 1][0] * region[0][1];
 			area -= region[0][0] * region[region.length - 1][1];
 		}
-		return 1. - Math.abs(area) / 2. / (Config.GRID * Config.GRID);
+		return Math.abs(area) / 2. / (Config.GRID * Config.GRID);
 	}
 
 	segment_count()
 	{
-		return Utils.linear(this.segments.length, 1, 0, Config.MAX_SEGMENTS, 1);
+		// 0 segment -> ocena 0
+		// MAX_SEGMENTS -> 1
+		return Utils.linear(this.segments.length, 0, 0, Config.MAX_SEGMENTS, 1);
 	}
 
 	height()
 	{
+		// wysokość 0 -> 0
+		// maksymalna wysokość -> 1
 		const max_height
 			= Math.max.apply(Math, this.segments.map((o) => o.height));
 		return Utils.linear(
@@ -79,7 +85,7 @@ export class Genotyp {
 
 	ocen()
 	{
-		this.ocena = this.base_area() * this.segment_count() * this.height();
+		this.ocena = (1 - this.base_area()) * this.segment_count() * this.height();
 	}
 
 	////////////////////////////////////////
