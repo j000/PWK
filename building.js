@@ -82,26 +82,26 @@ function init()
 		mainlight = new THREE.DirectionalLight(COLOR_LIGHT_MAIN, 0.9);
 		mainlight.layers.enable(0);
 		mainlight.layers.enable(1);
-		mainlight.layers.enable(2);
-		mainlight.position.set(0, 1000 * Config.METER, 1000 * Config.METER);
-		mainlight.position.applyAxisAngle(
-			new THREE.Vector3(0, 1, 0), Math.PI / 6);
 
+		const SQRT3 = Math.cbrt(3);
 		mainlight.castShadow = true;
-		const shadow_range = 2
-			* (Config.GRID + Config.SPACING
-			   + Config.STREET
-				   / Math.min(
-					   Config.GRIDS_PER_BLOCK_X, Config.GRIDS_PER_BLOCK_Y))
-			* Config.N * Math.SQRT2;
-		mainlight.shadow.camera.near = -shadow_range;
-		mainlight.shadow.camera.far = shadow_range;
-		mainlight.shadow.camera.left = -shadow_range;
-		mainlight.shadow.camera.right = shadow_range;
-		mainlight.shadow.camera.bottom = -shadow_range;
+		const shadow_range_x = Config.N * (Config.GRID + Config.SPACING + Config.STREET / Config.GRIDS_PER_BLOCK_X);
+		const shadow_range_y = Config.N * (Config.GRID + Config.SPACING + Config.STREET / Config.GRIDS_PER_BLOCK_Y);
+		const shadow_range = Math.max(shadow_range_y, shadow_range_x) * SQRT3 * 1.1;
+		mainlight.shadow.camera.near = 0;
+		mainlight.shadow.camera.far = shadow_range * 2;
+		mainlight.shadow.camera.left = -shadow_range * Math.SQRT2;
+		mainlight.shadow.camera.right = shadow_range * Math.SQRT2;
 		mainlight.shadow.camera.top = shadow_range;
+		mainlight.shadow.camera.bottom = -shadow_range;
 		mainlight.shadow.mapSize.width = 8 * 1024;
 		mainlight.shadow.mapSize.height = 8 * 1024;
+
+		mainlight.position.set(0, shadow_range, 0);
+		mainlight.position.applyAxisAngle(
+			new THREE.Vector3(0, 0, 1), Math.PI / 4);
+		mainlight.position.applyAxisAngle(
+			new THREE.Vector3(0, 1, 0), Math.PI / 6);
 
 		mainlight.matrixAutoUpdate = false;
 		mainlight.updateMatrix();
@@ -224,6 +224,13 @@ function onDocumentKeyDown(event)
 		camera.layers.toggle(1);
 	} else if (key >= '1' && key <= '9') {
 		camera.layers.toggle(event.keyCode - 49);
+	} else if (key == 'z') {
+		camera.layers.set(0);
+		renderer.shadowMap.enabled = false;
+		scene.traverse((child) => {
+			if (child.material)
+				child.material.needsUpdate = true;
+		});
 	}
 };
 
